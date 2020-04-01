@@ -1,6 +1,6 @@
-extern crate nom;
 pub mod internal;
-use super::language::{calculate_language, Language};
+use super::ctag_item::CtagItem;
+use super::language::Language;
 use super::token_kind::{calculate_kind, TokenKind};
 use nom::{
     branch::alt,
@@ -12,25 +12,15 @@ use nom::{
     sequence::{preceded, separated_pair, terminated, tuple},
     IResult,
 };
-use serde::Serialize;
 use std::collections::HashMap;
 
-#[derive(Debug, Serialize, PartialEq)]
-pub struct ParsedCtagItem<'a> {
-    pub name: &'a str,
-    pub file_path: &'a str,
-    pub language: Option<Language>,
-    pub tags: HashMap<String, String>,
-    pub kind: TokenKind,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ParsedField<'a> {
     KindField(char),
     ParsedField(&'a str, &'a str),
 }
 
-pub fn parse(input: &str) -> IResult<&str, Vec<ParsedCtagItem>> {
+pub fn parse(input: &str) -> IResult<&str, Vec<CtagItem>> {
     let (input, _) = internal::tag_metadata(input)?;
     terminated(separated_list(tag("\n"), ctag_item_parser), tag("\n"))(input)
 }
@@ -83,20 +73,20 @@ fn tag_address_without_fields_parser(input: &str) -> IResult<&str, &str> {
     internal::to_newline(input)
 }
 
-fn ctag_item_parser(input: &str) -> IResult<&str, ParsedCtagItem> {
+fn ctag_item_parser(input: &str) -> IResult<&str, CtagItem> {
     let (input, name) = context("tagName", internal::to_tab)(input)?;
     let (input, file_path) = context("tagPath", internal::to_tab)(input)?;
     let (input, (_, parsed_fields)) = address_and_fields_parser(input)?;
-    let language = calculate_language(file_path);
-    let (kind, final_fields) = build_kind_and_fields(language.clone(), parsed_fields.clone());
+    let language = Language::from_path(file_path);
+    let (kind, tags) = build_kind_and_fields(language, parsed_fields);
 
     Ok((
         input,
-        ParsedCtagItem {
+        CtagItem {
             name,
             file_path,
             language,
-            tags: final_fields,
+            tags,
             kind,
         },
     ))
@@ -138,7 +128,7 @@ fn parses_item_lines() {
         ctag_item_parser("withInfo\tpath/to/file.rb\t45"),
         Ok((
             "",
-            ParsedCtagItem {
+            CtagItem {
                 name: "withInfo",
                 file_path: "path/to/file.rb",
                 language: Some(Language::Ruby),
@@ -156,14 +146,14 @@ fn parses_multiple_lines() {
         Ok((
             "",
             vec![
-                ParsedCtagItem {
+                CtagItem {
                     name: "first",
                     file_path: "path/to/file.rb",
                     language: Some(Language::Ruby),
                     tags: HashMap::new(),
                     kind: TokenKind::Undefined
                 },
-                ParsedCtagItem {
+                CtagItem {
                     name: "second",
                     file_path: "path/to/file.rb",
                     language: Some(Language::Ruby),

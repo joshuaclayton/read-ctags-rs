@@ -10,9 +10,10 @@ pub fn read_first_available_to_string(filenames: &[&str]) -> Result<String, io::
     );
 }
 
-fn first_success<A, B, C>(values: &[A], default: C, f: fn(A) -> Result<B, C>) -> Result<B, C>
+fn first_success<A, B, C, F>(values: &[A], default: C, f: F) -> Result<B, C>
 where
     A: Copy,
+    F: Fn(A) -> Result<B, C>,
 {
     let mut outcome = Err(default);
     for &x in values.iter() {
